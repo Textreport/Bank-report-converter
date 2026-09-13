@@ -4,6 +4,7 @@ import os
 import re
 import csv
 import zipfile
+import rarfile
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -44,7 +45,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">🏦 Bank Reports to Excel Converter</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">ટેક્સ્ટ ફાઇલો અથવા ZIP ફાઇલને ૧-ક્લિકમાં પ્રોપર એક્સેલમાં કન્વર્ટ કરો</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">ટેક્સ્ટ ફાઇલો, ZIP અથવા RAR ફાઇલને ૧-ક્લિકમાં પ્રોપર એક્સેલમાં કન્વર્ટ કરો</div>', unsafe_allow_html=True)
 
 # ૨. ફિલ્ટર અને ક્લીનિંગ લોજિક
 IGNORE_PATTERNS = [
@@ -189,9 +190,9 @@ def convert_to_excel(df):
     output.seek(0)
     return output.getvalue()
 
-# ૩. યુઝર ઇન્ટરફેસ (સાદી ફાઇલો અને ZIP બંને સ્વીકારશે)
+# ૩. યુઝર ઇન્ટરફેસ (સાદી ફાઇલો, ZIP અને RAR ત્રણેય સ્વીકારશે)
 uploaded_files = st.file_uploader(
-    "ફાઇલો અથવા ZIP ફાઇલ પસંદ કરો (Select .txt / .prt / .zip files):",
+    "ફાઇલો, ZIP અથવા RAR ફાઇલ પસંદ કરો:",
     accept_multiple_files=True
 )
 
@@ -200,8 +201,10 @@ if uploaded_files:
     
     for f_obj in uploaded_files:
         fname = f_obj.name
-        # જો ZIP ફાઇલ હોય તો આપોઆપ અનઝિપ કરો
-        if fname.lower().endswith('.zip'):
+        lower_name = fname.lower()
+        
+        # જો ZIP ફાઇલ હોય
+        if lower_name.endswith('.zip'):
             try:
                 with zipfile.ZipFile(f_obj) as z:
                     for z_info in z.infolist():
@@ -209,7 +212,20 @@ if uploaded_files:
                             f_content = z.read(z_info.filename)
                             file_items.append((os.path.basename(z_info.filename), f_content))
             except Exception as e:
-                st.error(f"ZIP ફાઇલ ખોલવામાં ભૂલ આવી ({fname}): {str(e)}")
+                st.error(f"ZIP ફાઇલ ખોલવામાં ભૂલ ({fname}): {str(e)}")
+                
+        # જો RAR ફાઇલ હોય
+        elif lower_name.endswith('.rar'):
+            try:
+                with rarfile.RarFile(f_obj) as r:
+                    for r_info in r.infolist():
+                        if not r_info.isdir() and not os.path.basename(r_info.filename).startswith('.'):
+                            f_content = r.read(r_info.filename)
+                            file_items.append((os.path.basename(r_info.filename), f_content))
+            except Exception as e:
+                st.error(f"RAR ફાઇલ ખોલવામાં ભૂલ ({fname}): {str(e)}")
+                
+        # સાદી છૂટી ફાઇલો
         else:
             file_items.append((fname, f_obj.read()))
             
