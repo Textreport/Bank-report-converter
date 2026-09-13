@@ -8,6 +8,7 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 # ૧. પેજ સેટઅપ
 st.set_page_config(
@@ -43,7 +44,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">🏦 Bank Reports to Excel Converter</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">ટેક્સ્ટ રિપોર્ટ ફાઇલોને ૧-ક્લિકમાં પ્રોપર એક્સેલમાં કન્વર્ટ કરો</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">ટેક્સ્ટ રિપોર્ટ ફાઇલોને ૧-ક્લિકમાં પ્રોપર એક્સેલમાં કન્વર્ટ કરો (100% Fix)</div>', unsafe_allow_html=True)
 
 # ૨. ફિલ્ટર અને ક્લીનિંગ લોજિક
 IGNORE_PATTERNS = [
@@ -54,8 +55,15 @@ IGNORE_PATTERNS = [
     "GL CLASS CODE", "GL-CLASS-CODE", "AREA:"
 ]
 
+def sanitize_text(val):
+    """ પ્રિન્ટરના છૂપા અમાન્ય કેરેક્ટર્સ દૂર કરે છે """
+    if val is None:
+        return ""
+    val_str = str(val)
+    return ILLEGAL_CHARACTERS_RE.sub('', val_str).strip()
+
 def clean_dr_amount(val):
-    val_str = str(val).strip()
+    val_str = sanitize_text(val)
     if not val_str:
         return ""
     if re.search(r'\bDr\b', val_str, re.IGNORECASE) or val_str.endswith("Dr") or val_str.endswith("dr"):
@@ -82,7 +90,8 @@ def parse_deposits_balance_report(lines):
     )
     rows = []
     for l in lines:
-        m = pattern.match(l)
+        clean_l = sanitize_text(l)
+        m = pattern.match(clean_l)
         if m:
             rows.append({
                 "ACCOUNT NUMBER": m.group(1).strip(),
@@ -103,14 +112,14 @@ def parse_pipe_delimited(lines):
     header_cols = []
     data_rows = []
     for l in lines:
-        st_ = l.strip()
-        if not st_ or re.match(r'^-{10,}', st_) or st_.startswith('^[') or st_.startswith('\x0c') or any(kw in st_.upper() for kw in IGNORE_PATTERNS):
+        clean_l = sanitize_text(l)
+        if not clean_l or re.match(r'^-{10,}', clean_l) or any(kw in clean_l.upper() for kw in IGNORE_PATTERNS):
             continue
-        if '|' in st_:
-            parts = [clean_dr_amount(p.strip()) for p in st_.split('|')]
+        if '|' in clean_l:
+            parts = [clean_dr_amount(p) for p in clean_l.split('|')]
             if parts and parts[0] == "": parts = parts[1:]
             if parts and parts[-1] == "": parts = parts[:-1]
-            if not header_cols and any(w in st_.upper() for w in ["NAME", "ACCOUNT", "AMOUNT", "LIMIT", "DATE", "PRODUCT"]):
+            if not header_cols and any(w in clean_l.upper() for w in ["NAME", "ACCOUNT", "AMOUNT", "LIMIT", "DATE", "PRODUCT"]):
                 header_cols = parts
             elif header_cols and len(parts) >= 2:
                 if len(parts) < len(header_cols): parts.extend([""] * (len(header_cols) - len(parts)))
@@ -120,25 +129,28 @@ def parse_pipe_delimited(lines):
 def parse_general_cbs_report(lines):
     h_idx = -1
     for i, l in enumerate(lines):
-        if re.match(r'^\s*-{15,}', l) and i + 2 < len(lines) and re.match(r'^\s*-{15,}', lines[i+2]):
-            h_idx = i + 1; break
+        clean_l = sanitize_text(l)
+        if re.match(r'^\s*-{15,}', clean_l) and i + 2 < len(lines):
+            if re.match(r'^\s*-{15,}', sanitize_text(lines[i+2])):
+                h_idx = i + 1; break
     if h_idx == -1: return None
-    cols = [m.group(1).strip() for m in re.finditer(r'(\S+(?:\s(?!\s)\S+)*)', lines[h_idx])]
+    cols = [m.group(1).strip() for m in re.finditer(r'(\S+(?:\s(?!\s)\S+)*)', sanitize_text(lines[h_idx]))]
     if len(cols) < 2: return None
     rows = []
     for l in lines[h_idx+2:]:
-        st_ = l.strip()
-        if not st_ or re.match(r'^-{10,}', st_) or st_.startswith('^[') or st_.startswith('\x0c') or any(kw in st_.upper() for kw in IGNORE_PATTERNS) or "ACCOUNT NUMBER" in st_:
+        clean_l = sanitize_text(l)
+        if not clean_l or re.match(r'^-{10,}', clean_l) or any(kw in clean_l.upper() for kw in IGNORE_PATTERNS) or "ACCOUNT NUMBER" in clean_l:
             continue
-        parts = [p.strip() for p in re.split(r'\s{2,}', st_) if p.strip() != ""]
+        parts = [p.strip() for p in re.split(r'\s{2,}', clean_l) if p.strip() != ""]
         if len(parts) > 1:
             rows.append({cols[k]: clean_dr_amount(parts[k]) if k < len(parts) else "" for k in range(len(cols))})
     return pd.DataFrame(rows) if rows else None
 
 def parse_csv_generic(content):
-    try: delim = csv.Sniffer().sniff(content[:4096], delimiters=[',', '\t', '|', ';']).delimiter
-    except: delim = ',' if ',' in content else '\t'
-    df = pd.read_csv(io.StringIO(content), sep=delim, engine="python", on_bad_lines='skip', encoding_errors='ignore')
+    clean_content = sanitize_text(content)
+    try: delim = csv.Sniffer().sniff(clean_content[:4096], delimiters=[',', '\t', '|', ';']).delimiter
+    except: delim = ',' if ',' in clean_content else '\t'
+    df = pd.read_csv(io.StringIO(clean_content), sep=delim, engine="python", on_bad_lines='skip', encoding_errors='ignore')
     for col in df.columns:
         if df[col].dtype == object: df[col] = df[col].apply(clean_dr_amount)
     return df
@@ -147,7 +159,11 @@ def convert_to_excel(df):
     output = io.BytesIO()
     wb = Workbook()
     ws = wb.active
-    ws.append(list(df.columns))
+    
+    # Headers Clean
+    clean_headers = [sanitize_text(c) for c in df.columns]
+    ws.append(clean_headers)
+    
     h_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
     h_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     data_font = Font(name="Calibri", size=10)
@@ -155,15 +171,17 @@ def convert_to_excel(df):
     
     for cell in ws[1]:
         cell.fill = h_fill; cell.font = h_font; cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        
     for row in df.itertuples(index=False): 
-        ws.append(list(row))
+        clean_row = [sanitize_text(v) for v in row]
+        ws.append(clean_row)
+        
     for r in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
         for cell in r:
             cell.font = data_font; cell.border = border
             val_s = str(cell.value or "").strip()
             cell.alignment = Alignment(horizontal="right") if re.match(r'^-?[\d,]+(\.\d+)?$', val_s) else Alignment(horizontal="left")
-    
-    # Auto Column Width (સુધારેલ ભાગ: cell.value)
+            
     for col in ws.columns:
         max_l = max(len(str(cell.value or '')) for cell in col)
         ws.column_dimensions[get_column_letter(col[0].column)].width = max(max_l + 3, 12)
