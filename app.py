@@ -139,8 +139,8 @@ def parse_csv_generic(content):
     try: delim = csv.Sniffer().sniff(content[:4096], delimiters=[',', '\t', '|', ';']).delimiter
     except: delim = ',' if ',' in content else '\t'
     df = pd.read_csv(io.StringIO(content), sep=delim, engine="python", on_bad_lines='skip', encoding_errors='ignore')
-    for c in df.columns:
-        if df[c].dtype == object: df[c] = df[c].apply(clean_dr_amount)
+    for col in df.columns:
+        if df[col].dtype == object: df[col] = df[col].apply(clean_dr_amount)
     return df
 
 def convert_to_excel(df):
@@ -152,23 +152,28 @@ def convert_to_excel(df):
     h_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     data_font = Font(name="Calibri", size=10)
     border = Border(left=Side(style='thin', color='D9D9D9'), right=Side(style='thin', color='D9D9D9'), top=Side(style='thin', color='D9D9D9'), bottom=Side(style='thin', color='D9D9D9'))
+    
     for cell in ws[1]:
         cell.fill = h_fill; cell.font = h_font; cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    for row in df.itertuples(index=False): ws.append(list(row))
+    for row in df.itertuples(index=False): 
+        ws.append(list(row))
     for r in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
         for cell in r:
             cell.font = data_font; cell.border = border
             val_s = str(cell.value or "").strip()
             cell.alignment = Alignment(horizontal="right") if re.match(r'^-?[\d,]+(\.\d+)?$', val_s) else Alignment(horizontal="left")
+    
+    # Auto Column Width (સુધારેલ ભાગ: cell.value)
     for col in ws.columns:
-        max_l = max(len(str(c.value or '')) for cell in col)
+        max_l = max(len(str(cell.value or '')) for cell in col)
         ws.column_dimensions[get_column_letter(col[0].column)].width = max(max_l + 3, 12)
+        
     ws.freeze_panes = "A2"
     wb.save(output)
     output.seek(0)
     return output.getvalue()
 
-# ૩. યુઝર ઇન્ટરફેસ (કોઈપણ ફાઇલ લિમિટ વગર - મોબાઇલ ફ્રેન્ડલી)
+# ૩. યુઝર ઇન્ટરફેસ
 uploaded_files = st.file_uploader(
     "ટેક્સ્ટ ફાઇલો પસંદ કરો (Select Any Files):",
     accept_multiple_files=True
