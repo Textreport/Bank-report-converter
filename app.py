@@ -326,8 +326,7 @@ def convert_dataframe_to_excel_bytes(df):
 
 uploaded_files = st.file_uploader(
     "મોબાઇલ કે કમ્પ્યુટરમાંથી ટેક્સ્ટ ફાઇલો પસંદ કરો (Select Files):",
-    accept_multiple_files=True,
-    type=["txt", "csv", "dat", "prn", "prt"],
+    accept_multiple_files=True
 )
 
 if uploaded_files:
