@@ -12,6 +12,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Bank Report to Excel Converter", page_icon="🏦", layout="centered"
 )
+st.markdown("[આ લિંક સીધી તમારા મોબાઈલમાં ખોલો](https://bank-report-converter-igahw2smogh7r9fdopummj.streamlit.app/)")
 
 st.markdown(
     """
