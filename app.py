@@ -192,8 +192,9 @@ def convert_to_excel(df):
 
 # ૩. યુઝર ઇન્ટરફેસ (સાદી ફાઇલો, ZIP અને RAR ત્રણેય સ્વીકારશે)
 uploaded_files = st.file_uploader(
-    "ફાઇલો, ZIP અથવા RAR ફાઇલ પસંદ કરો:",
-    accept_multiple_files=True
+    "ફાઇલો અથવા ZIP ફાઇલ પસંદ કરો:",
+    accept_multiple_files=True,
+    type=None
 )
 
 if uploaded_files:
