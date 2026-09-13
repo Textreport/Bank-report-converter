@@ -44,7 +44,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">🏦 Bank Reports to Excel Converter</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">ટેક્સ્ટ રિપોર્ટ ફાઇલોને ૧-ક્લિકમાં પ્રોપર એક્સેલમાં કન્વર્ટ કરો (100% Fix)</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">ટેક્સ્ટ ફાઇલો અથવા ZIP ફાઇલને ૧-ક્લિકમાં પ્રોપર એક્સેલમાં કન્વર્ટ કરો</div>', unsafe_allow_html=True)
 
 # ૨. ફિલ્ટર અને ક્લીનિંગ લોજિક
 IGNORE_PATTERNS = [
@@ -56,7 +56,6 @@ IGNORE_PATTERNS = [
 ]
 
 def sanitize_text(val):
-    """ પ્રિન્ટરના છૂપા અમાન્ય કેરેક્ટર્સ દૂર કરે છે """
     if val is None:
         return ""
     val_str = str(val)
@@ -160,7 +159,6 @@ def convert_to_excel(df):
     wb = Workbook()
     ws = wb.active
     
-    # Headers Clean
     clean_headers = [sanitize_text(c) for c in df.columns]
     ws.append(clean_headers)
     
@@ -191,15 +189,32 @@ def convert_to_excel(df):
     output.seek(0)
     return output.getvalue()
 
-# ૩. યુઝર ઇન્ટરફેસ
+# ૩. યુઝર ઇન્ટરફેસ (સાદી ફાઇલો અને ZIP બંને સ્વીકારશે)
 uploaded_files = st.file_uploader(
-    "ટેક્સ્ટ ફાઇલો પસંદ કરો (Select Any Files):",
+    "ફાઇલો અથવા ZIP ફાઇલ પસંદ કરો (Select .txt / .prt / .zip files):",
     accept_multiple_files=True
 )
 
 if uploaded_files:
-    total_files = len(uploaded_files)
-    st.info(f"📁 પસંદ કરેલી ફાઇલોની સંખ્યા: {total_files}")
+    file_items = []
+    
+    for f_obj in uploaded_files:
+        fname = f_obj.name
+        # જો ZIP ફાઇલ હોય તો આપોઆપ અનઝિપ કરો
+        if fname.lower().endswith('.zip'):
+            try:
+                with zipfile.ZipFile(f_obj) as z:
+                    for z_info in z.infolist():
+                        if not z_info.is_dir() and not os.path.basename(z_info.filename).startswith('.'):
+                            f_content = z.read(z_info.filename)
+                            file_items.append((os.path.basename(z_info.filename), f_content))
+            except Exception as e:
+                st.error(f"ZIP ફાઇલ ખોલવામાં ભૂલ આવી ({fname}): {str(e)}")
+        else:
+            file_items.append((fname, f_obj.read()))
+            
+    total_files = len(file_items)
+    st.info(f"📁 કુલ કન્વર્ટ થવા માટે તૈયાર ફાઇલો: {total_files}")
     
     if st.button("🚀 Convert to Excel (એક્સેલમાં કન્વર્ટ કરો)"):
         progress_bar = st.progress(0)
@@ -207,13 +222,11 @@ if uploaded_files:
         converted_files = {}
         failed_files = []
         
-        for idx, file_obj in enumerate(uploaded_files):
-            filename = file_obj.name
+        for idx, (filename, content_bytes) in enumerate(file_items):
             base_name, _ = os.path.splitext(filename)
             status_text.text(f"પ્રોસેસ થઈ રહી છે: {filename} ({idx+1}/{total_files})...")
             
             try:
-                content_bytes = file_obj.read()
                 try: content_str = content_bytes.decode('utf-8')
                 except UnicodeDecodeError: content_str = content_bytes.decode('latin1', errors='ignore')
                 
